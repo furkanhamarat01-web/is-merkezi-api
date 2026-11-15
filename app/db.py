@@ -23,7 +23,7 @@ TABLES = {
     "ignored_sources",
 }
 OWNED = {"invoices", "reminders", "reports", "tasks", "contacts", "transactions", "projects", "offers"}
-_NO_ID = {"settings", "notify_log", "ignored_sources"}
+_NO_ID = {"settings", "notify_log", "ignored_sources", "talep_members"}
 _QMARK = re.compile(r"\?")
 _INSERT = re.compile(r"insert\s+into\s+([a-z_]+)", re.IGNORECASE)
 
@@ -76,11 +76,14 @@ class Connection:
         return Cursor(result)
 
     def commit(self):
-        self.trans.commit()
+        if self.trans.is_active:
+            self.trans.commit()
+        self.trans = self.raw.begin()
 
     def rollback(self):
         if self.trans.is_active:
             self.trans.rollback()
+        self.trans = self.raw.begin()
 
     def close(self):
         self.raw.close()
@@ -152,8 +155,20 @@ def init_db() -> None:
     global _ready
     if _ready:
         return
+    import app.talep.models  # noqa: F401
+    from app.talep.store import ensure_roles
+
     _ensure_postgres_database()
     Base.metadata.create_all(engine())
+    conn = Connection(engine().connect())
+    try:
+        ensure_roles(conn)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
     _ready = True
 
 

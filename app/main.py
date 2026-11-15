@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import cors_origins
 from app.db import init_db
 from app.endpoints import contacts, dashboard, health, invoices, offers, projects, reminders, reports, settings, store, talepler, tasks, transactions
+from app.endpoints.talep import router as talep_router
 
 
 @asynccontextmanager
@@ -38,3 +39,4 @@ app.include_router(talepler.router)
 app.include_router(reports.router)
 app.include_router(settings.router)
 app.include_router(store.router)
+app.include_router(talep_router)
