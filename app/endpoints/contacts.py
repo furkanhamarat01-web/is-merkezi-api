@@ -18,7 +18,7 @@ def list_contacts(
     offset: int = Query(0, ge=0),
 ):
     equals = {"record_kind": record_kind} if record_kind else None
-    return call(lambda: list_records(conn, "contacts", owner, equals, q, limit, offset, "name COLLATE NOCASE"))
+    return call(lambda: list_records(conn, "contacts", owner, equals, q, limit, offset, "lower(name)"))
 
 
 @router.get("/{row_id}")

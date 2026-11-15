@@ -1,6 +1,6 @@
+import json
 import os
 import re
-import sqlite3
 import tempfile
 
 from fastapi import APIRouter, Query
@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
-from app.config import db_path
+from app.config import database_url
 from app.db import TABLES, connect
 from app.deps import Auth, Conn, Owner, call
 from app.records import delete_record, get_record, insert_record, list_records, update_record
@@ -61,7 +61,7 @@ def claim(body: ClaimIn, conn=Conn, owner=Owner):
 @router.post("/workspace")
 def workspace(conn=Conn, owner=Owner):
     def run():
-        ensure_workspace(conn, owner, str(db_path()))
+        ensure_workspace(conn, owner, database_url())
         return {"ok": True}
 
     return call(run)
@@ -69,16 +69,27 @@ def workspace(conn=Conn, owner=Owner):
 
 @router.get("/backup")
 def backup():
-    handle = tempfile.NamedTemporaryFile(prefix="is-merkezi-", suffix=".db", delete=False)
-    handle.close()
-    dest = sqlite3.connect(handle.name)
+    payload = {}
     src = connect()
     try:
-        src.backup(dest)
+        for table in sorted(TABLES):
+            rows = src.execute(f"SELECT * FROM {table}").fetchall()
+            payload[table] = [dict(row) for row in rows]
+        src.commit()
+    except Exception:
+        src.rollback()
+        raise
     finally:
-        dest.close()
         src.close()
-    return FileResponse(handle.name, filename="is_merkezi.db", background=BackgroundTask(os.unlink, handle.name))
+    handle = tempfile.NamedTemporaryFile(prefix="is-merkezi-", suffix=".json", delete=False)
+    handle.write(json.dumps(payload, ensure_ascii=False).encode())
+    handle.close()
+    return FileResponse(
+        handle.name,
+        filename="is_merkezi.json",
+        media_type="application/json",
+        background=BackgroundTask(os.unlink, handle.name),
+    )
 
 
 @router.get("/invoices/source")
@@ -89,7 +100,10 @@ def invoice_source(key: str, conn=Conn):
 
 @router.post("/ignored")
 def ignore(body: KeyIn, conn=Conn):
-    conn.execute("INSERT OR IGNORE INTO ignored_sources(key) VALUES(?)", (body.key,))
+    conn.execute(
+        "INSERT INTO ignored_sources(key) VALUES(?) ON CONFLICT(key) DO NOTHING",
+        (body.key,),
+    )
     return {"ok": True}
 
 

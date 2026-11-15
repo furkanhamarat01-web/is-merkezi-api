@@ -9,6 +9,7 @@ class ApiTest(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         os.environ["IS_MERKEZI_HOME"] = cls.tmp.name
         os.environ["API_TOKEN"] = "test-token"
+        os.environ["DATABASE_URL"] = "sqlite:///" + os.path.join(cls.tmp.name, "test.db")
         os.environ.pop("CORS_ORIGINS", None)
         from fastapi.testclient import TestClient
         from app.main import app

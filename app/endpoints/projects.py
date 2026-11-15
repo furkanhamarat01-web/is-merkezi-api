@@ -18,7 +18,7 @@ def list_projects(
     offset: int = Query(0, ge=0),
 ):
     equals = {"status": status} if status else None
-    return call(lambda: list_records(conn, "projects", owner, equals, q, limit, offset, "name COLLATE NOCASE"))
+    return call(lambda: list_records(conn, "projects", owner, equals, q, limit, offset, "lower(name)"))
 
 
 @router.get("/{row_id}")

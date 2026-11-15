@@ -1,7 +1,7 @@
 import secrets
-import sqlite3
 
 from fastapi import Depends, Header, HTTPException
+from sqlalchemy.exc import IntegrityError
 
 from app.config import api_token
 from app.db import connect
@@ -49,7 +49,7 @@ def call(fn):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except sqlite3.IntegrityError as exc:
+    except IntegrityError as exc:
         raise HTTPException(status_code=409, detail="Bu kayıt zaten var.") from exc
 
 
