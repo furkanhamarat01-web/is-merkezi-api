@@ -8944,6 +8944,9 @@ class App(tk.Tk):
         return f"{prefix}{highest + 1}"
 
     def _current_talep_account(self):
+        cached = getattr(self, "_talep_account", None)
+        if cached is not None:
+            return cached
         path = talep_session_path()
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
@@ -8951,9 +8954,13 @@ class App(tk.Tk):
             return None
         if not lines or not lines[0].strip().isdigit():
             return None
-        return read_talep_account(int(lines[0].strip()))
+        account = read_talep_account(int(lines[0].strip()))
+        if account is not None:
+            self._talep_account = account
+        return account
 
     def _save_talep_session(self, account):
+        self._talep_account = account
         path = talep_session_path()
         path.write_text(f"{account['id']}\n{account['email']}\n", encoding="utf-8")
         try:
@@ -8962,6 +8969,7 @@ class App(tk.Tk):
             pass
 
     def _clear_talep_session(self):
+        self._talep_account = None
         try:
             talep_session_path().unlink()
         except OSError:
