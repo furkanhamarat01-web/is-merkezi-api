@@ -31,26 +31,15 @@ def _row(row):
 
 
 def ensure_roles(conn):
-    admin = conn.execute("SELECT id FROM talep_users WHERE email=?", (ADMIN_EMAIL,)).fetchone()
-    if admin is not None:
-        conn.execute(
-            "UPDATE talep_users SET is_admin=1, role=? WHERE email=?",
-            (ADMIN_ROLE, ADMIN_EMAIL),
-        )
-        conn.execute("UPDATE talep_users SET is_admin=0 WHERE email!=?", (ADMIN_EMAIL,))
-        conn.execute(
-            "UPDATE talep_users SET role=? WHERE email!=? AND (role IS NULL OR role='' OR role=?)",
-            ("Kullanıcı", ADMIN_EMAIL, ADMIN_ROLE),
-        )
-        return
     conn.execute(
         "UPDATE talep_users SET role=? WHERE is_admin=1 AND (role IS NULL OR role='')",
         (ADMIN_ROLE,),
     )
     conn.execute(
-        "UPDATE talep_users SET role=? WHERE is_admin=0 AND (role IS NULL OR role='')",
+        "UPDATE talep_users SET role=? WHERE (is_admin=0 OR is_admin IS NULL) AND (role IS NULL OR role='')",
         ("Kullanıcı",),
     )
+    conn.execute("UPDATE talep_users SET is_admin=1 WHERE role=?", (ADMIN_ROLE,))
 
 
 def user_count(conn):
@@ -65,13 +54,17 @@ def add_user(conn, name, email, password, secret, is_admin=False, username="", m
         username = (username + "kullanici")[:32]
     if not name or "@" not in email or len(password) < 6 or len(username) < 3:
         raise ValueError("Ad, kullanıcı adı, e-posta ve en az 6 karakterlik parola gerekli.")
-    if email == ADMIN_EMAIL:
+    if user_count(conn) == 0:
         is_admin = True
         role = ADMIN_ROLE
+    elif role == ADMIN_ROLE:
+        is_admin = True
     elif is_admin:
-        raise ValueError("Yönetici hesabı yalnızca furkan.hamarat01@gmail.com olabilir.")
+        raise ValueError("Yönetici için Yönetici rolünü seç.")
     elif role not in ROLES:
         raise ValueError("Rol seç.")
+    else:
+        is_admin = False
     if must_change is None:
         must_change = 0 if is_admin else 1
     try:
@@ -319,6 +312,90 @@ def member_count(conn, team_id):
         "SELECT COUNT(*) AS n FROM talep_members WHERE team_id=?",
         (int(team_id),),
     ).fetchone()["n"])
+
+
+def user_by_username(conn, username):
+    handle = clean_username(username)
+    email = clean_email(username)
+    row = None
+    if handle:
+        row = conn.execute("SELECT * FROM talep_users WHERE username=?", (handle,)).fetchone()
+    if row is None and "@" in str(username or ""):
+        row = conn.execute("SELECT * FROM talep_users WHERE email=?", (email,)).fetchone()
+    return _row(row)
+
+
+def login_password(conn, username, password):
+    user = user_by_username(conn, username)
+    if user is None or not check_password(password, user["password"]):
+        return None
+    return user
+
+
+def open_session(conn, username, password, device=None):
+    user = login_password(conn, username, password)
+    if user is None:
+        add_login_log(conn, username, "Başarısız", device=device)
+        return None
+    add_login_log(conn, user["email"], "Giriş", user=user, device=device)
+    return user_by_username(conn, user.get("username") or username)
+
+
+def request_reset(conn, username):
+    user = user_by_username(conn, username)
+    if user is None:
+        return
+    pending = conn.execute(
+        "SELECT id FROM talep_resets WHERE user_id=? AND status='Bekliyor'",
+        (int(user["id"]),),
+    ).fetchone()
+    if pending is not None:
+        return
+    conn.execute(
+        "INSERT INTO talep_resets (user_id, username, status, created_at) VALUES (?,?,?,?)",
+        (int(user["id"]), user.get("username") or clean_username(username), "Bekliyor", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+    )
+    conn.commit()
+
+
+def reset_requests(conn):
+    rows = conn.execute(
+        """
+        SELECT r.*, u.name AS name, u.email AS email
+        FROM talep_resets r
+        JOIN talep_users u ON u.id = r.user_id
+        WHERE r.status='Bekliyor'
+        ORDER BY r.id DESC
+        """
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def grant_reset(conn, reset_id, password):
+    row = conn.execute("SELECT * FROM talep_resets WHERE id=?", (int(reset_id),)).fetchone()
+    if row is None or row["status"] != "Bekliyor":
+        raise ValueError("Parola isteği yok.")
+    set_password(conn, row["user_id"], password, True)
+    conn.execute("UPDATE talep_resets SET status='Verildi' WHERE id=?", (int(reset_id),))
+    conn.commit()
+
+
+def members_of_team(conn, team_name):
+    rows = conn.execute(
+        """
+        SELECT u.id, u.name FROM talep_users u
+        JOIN talep_members m ON m.user_id = u.id
+        JOIN talep_teams t ON t.id = m.team_id
+        WHERE t.name=?
+        ORDER BY u.name
+        """,
+        (" ".join(str(team_name or "").split()),),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def account(conn, user_id):
+    return _row(conn.execute("SELECT * FROM talep_users WHERE id=?", (int(user_id),)).fetchone())
 
 
 def login(conn, email, password, code):

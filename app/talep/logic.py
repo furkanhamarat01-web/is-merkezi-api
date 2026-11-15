@@ -9,6 +9,17 @@ from datetime import datetime
 ADMIN_EMAIL = "furkan.hamarat01@gmail.com"
 ADMIN_ROLE = "Yönetici"
 ROLES = ("Kullanıcı", "Sorumlu", "İzleyici")
+ALL_ROLES = (ADMIN_ROLE,) + ROLES
+_WORK = ("İş takibi", "Talepler", "Görevler", "Hatırlatmalar")
+_LEAD = _WORK + ("Firmalar", "Projeler", "Raporlar")
+_MONEY = ("Faturalar", "Gelir-Gider")
+_ADMIN = ("Ekipler", "Talep kodları", "Kullanıcılar", "Giriş kayıtları", "Ayarlar")
+SCREENS = {
+    "Yönetici": _LEAD + _MONEY + _ADMIN,
+    "Sorumlu": _LEAD + _MONEY,
+    "Kullanıcı": _WORK,
+    "İzleyici": ("İş takibi", "Talepler"),
+}
 PRIORITIES = ("Düşük", "Normal", "Yüksek", "Acil")
 STATUSES = ("Açık", "Üzerinde", "Beklemede", "Tamamlandı", "Reddedildi")
 NOTE_STATUSES = ("Beklemede", "Tamamlandı", "Reddedildi")
@@ -118,6 +129,10 @@ def note_list(raw):
                 "at": str(item.get("at") or ""),
             })
     return notes[-30:]
+
+
+def screens_for(role):
+    return list(SCREENS.get(role or "", SCREENS["İzleyici"]))
 
 
 def public_user(row):

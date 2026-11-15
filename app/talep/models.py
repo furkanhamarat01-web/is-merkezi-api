@@ -93,6 +93,16 @@ class TalepRequestCode(Base):
     all_teams: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
 
 
+class TalepReset(Base):
+    __tablename__ = "talep_resets"
+
+    id: Mapped[int] = _id()
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    username: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str | None] = _text()
+
+
 class TalepFile(Base):
     __tablename__ = "talep_files"
 

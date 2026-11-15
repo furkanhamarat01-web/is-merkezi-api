@@ -5,7 +5,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.deps import Auth, Conn, call
-from app.talep.logic import public_user
+from app.talep.logic import public_user, screens_for
 from app.talep import store
 
 router = APIRouter(prefix="/api/talep", tags=["VKV Talep"], dependencies=Auth)
@@ -39,6 +39,23 @@ class LoginIn(BaseModel):
     email: str = ""
     password: str = ""
     code: str = ""
+
+
+class SessionIn(BaseModel):
+    username: str = ""
+    password: str = ""
+    device: dict | None = None
+
+
+class ForgotIn(BaseModel):
+    username: str = ""
+
+
+class SetupIn(BaseModel):
+    name: str = ""
+    username: str = ""
+    password: str = ""
+    email: str = ""
 
 
 class LogIn(BaseModel):
@@ -94,6 +111,22 @@ class FileIn(BaseModel):
     data: str
 
 
+def _session(conn, user):
+    if user is None:
+        return None
+    member = [{"name": team["name"], "code": team["code"]} for team in store.user_teams(conn, user["id"])]
+    teams = [{"name": team["name"], "code": team["code"]} for team in store.teams(conn)] if user["is_admin"] else member
+    data = public_user(user)
+    data.pop("totp_secret", None)
+    data["is_admin"] = bool(int(data.get("is_admin") or 0))
+    data["must_change"] = bool(int(data.get("must_change") or 0))
+    data["role"] = data.get("role") or ("Yönetici" if data["is_admin"] else "Kullanıcı")
+    data["screens"] = screens_for(data["role"])
+    data["teams"] = teams
+    data["member_teams"] = member
+    return data
+
+
 def _actor(conn, user_id):
     row = conn.execute("SELECT * FROM talep_users WHERE id=?", (int(user_id),)).fetchone()
     if row is None:
@@ -146,6 +179,50 @@ def teams_of(user_id: int, conn=Conn):
 @router.get("/users/{user_id}/team-ids")
 def ids_of(user_id: int, conn=Conn):
     return {"ids": store.team_ids(conn, user_id)}
+
+
+@router.post("/setup", status_code=201)
+def setup(body: SetupIn, conn=Conn):
+    def run():
+        if store.user_count(conn):
+            raise ValueError("İlk hesap zaten var.")
+        email = body.email or f"{body.username}@vkv.local"
+        store.add_user(conn, body.name, email, body.password, "", username=body.username, role="Yönetici")
+        user = store.user_by_username(conn, body.username)
+        return _session(conn, user)
+    return call(run)
+
+
+@router.post("/session")
+def session(body: SessionIn, conn=Conn):
+    user = store.open_session(conn, body.username, body.password, body.device)
+    return {"user": _session(conn, user)}
+
+
+@router.post("/forgot")
+def forgot(body: ForgotIn, conn=Conn):
+    store.request_reset(conn, body.username)
+    return {"ok": True}
+
+
+@router.get("/resets")
+def resets(conn=Conn):
+    return store.reset_requests(conn)
+
+
+@router.post("/resets/{reset_id}/password")
+def give_password(reset_id: int, body: PasswordIn, conn=Conn):
+    return call(lambda: store.grant_reset(conn, reset_id, body.password) or {"ok": True})
+
+
+@router.get("/users/{user_id}/account")
+def account(user_id: int, conn=Conn):
+    return _session(conn, store.account(conn, user_id))
+
+
+@router.get("/teams/members")
+def team_members(name: str, conn=Conn):
+    return store.members_of_team(conn, name)
 
 
 @router.post("/login")

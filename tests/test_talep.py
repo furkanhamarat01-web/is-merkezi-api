@@ -140,6 +140,27 @@ class TalepApiTest(unittest.TestCase):
             for item in self.client.get("/api/talep/requests", headers=self.headers, params={"user_id": admin["id"]}).json()
         }
         self.assertEqual(admin_numbers, {"SAHA-1", "SATIN-1"})
+        signed_name = self.client.post("/api/talep/session", headers=self.headers, json={
+            "username": "ali", "password": "yeni-parola",
+        })
+        self.assertEqual(signed_name.status_code, 200, signed_name.text)
+        self.assertEqual(signed_name.json()["user"]["role"], "İzleyici")
+        self.assertIn("İş takibi", signed_name.json()["user"]["screens"])
+        self.assertNotIn("Kullanıcılar", signed_name.json()["user"]["screens"])
+        forgot = self.client.post("/api/talep/forgot", headers=self.headers, json={"username": "ali"})
+        self.assertEqual(forgot.status_code, 200, forgot.text)
+        pending = self.client.get("/api/talep/resets", headers=self.headers).json()
+        self.assertEqual(pending[0]["username"], "ali")
+        granted = self.client.post(
+            f"/api/talep/resets/{pending[0]['id']}/password",
+            headers=self.headers,
+            json={"password": "gecici1"},
+        )
+        self.assertEqual(granted.status_code, 200, granted.text)
+        again = self.client.post("/api/talep/session", headers=self.headers, json={
+            "username": "ali", "password": "gecici1",
+        }).json()["user"]
+        self.assertTrue(again["must_change"])
 
 
 if __name__ == "__main__":
