@@ -9903,8 +9903,8 @@ class App(tk.Tk):
             "Firmalar": "Yazdığın isim, açık olan Outlook adres defterinde aranır.",
             "Gelir-Gider": "Kayıt aç, fatura ekle. Sonradan kalemle belge ekleyip çıkarabilirsin.",
             "Projeler": "Proje seç, teklif ekle. PDF, e-posta, görüntü, Word ve Excel karşılaştırılır.",
-            "Ekipler": "Ekip adı ve konu. Dış talep kodu konudan üretilir.",
-            "Talep kodları": "Kullanıcının seçtiği talep kodları.",
+            "Ekipler": "Ekipleri oluştur ve düzenle. Satıra basınca düzenleme açılır.",
+            "Talep kodları": "Talep kodu oluştur, düzenle ve ekiplere bağla.",
             "Kullanıcılar": "Hesap, rol ve parola istekleri.",
             "Giriş kayıtları": "Giriş, çıkış ve başarısız deneme.",
         }
